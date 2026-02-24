@@ -32,29 +32,59 @@ export interface NavigationContext {
   routeSteps?: { instruction: string; type: string; stopName?: string; lineNumber?: string }[];
 }
 
+// ── 보안: 입력 길이 제한 ──
+const MAX_INPUT_LENGTH = 200;
+
+// ── 보안: 위험 키워드 필터링 ──
+const BLOCKED_PATTERNS = [
+  /자[살해]/,
+  /죽[고이겠]/,
+  /폭[발탄]/,
+  /무기/,
+  /약물.*과다/,
+  /마약/,
+];
+
+function containsBlockedContent(text: string): boolean {
+  return BLOCKED_PATTERNS.some((p) => p.test(text));
+}
+
+function sanitizeInput(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length > MAX_INPUT_LENGTH) {
+    return trimmed.slice(0, MAX_INPUT_LENGTH);
+  }
+  return trimmed;
+}
+
+// ── API 키를 환경변수에서 읽기 ──
+function getApiKey(): string {
+  const key = process.env.EXPO_PUBLIC_OPENAI_KEY;
+  if (!key || key === 'YOUR_OPENAI_API_KEY') {
+    throw new Error('EXPO_PUBLIC_OPENAI_KEY 환경변수가 설정되지 않았습니다.');
+  }
+  return key;
+}
+
 function buildContextPrompt(context?: NavigationContext): string {
   if (!context) return '';
 
   const parts: string[] = ['\n\n[현재 이동 상황]'];
 
-  // 네비게이션 상태
   if (context.isNavigating) {
     parts.push('📍 상태: 경로 안내 중');
   } else {
     parts.push('📍 상태: 대기 중 (경로 안내 없음)');
   }
 
-  // 위치 정보
   if (context.currentLocation) {
     parts.push(`위치: 위도 ${context.currentLocation.latitude.toFixed(5)}, 경도 ${context.currentLocation.longitude.toFixed(5)}`);
   }
 
-  // 목적지
   if (context.destination) {
     parts.push(`목적지: ${context.destination}`);
   }
 
-  // 현재 단계
   if (context.currentStep) {
     const stepProgress = context.totalSteps
       ? ` (${(context.currentStepIndex ?? 0) + 1}/${context.totalSteps}단계)`
@@ -62,12 +92,10 @@ function buildContextPrompt(context?: NavigationContext): string {
     parts.push(`현재 안내${stepProgress}: ${context.currentStep}`);
   }
 
-  // 경로 이탈
   if (context.isDeviated) {
     parts.push(`⚠️ 경로 이탈! (${Math.round(context.deviationDistance ?? 0)}m 벗어남)`);
   }
 
-  // 남은 경로 요약 (다음 2단계만)
   if (context.routeSteps && context.currentStepIndex != null) {
     const upcoming = context.routeSteps.slice(context.currentStepIndex + 1, context.currentStepIndex + 3);
     if (upcoming.length > 0) {
@@ -87,6 +115,25 @@ export async function sendChatMessage(
   messages: ChatMessage[],
   context?: NavigationContext,
 ): Promise<string> {
+  // 입력 검증: 마지막 사용자 메시지 필터링
+  const lastMsg = messages[messages.length - 1];
+  if (lastMsg?.role === 'user') {
+    // 길이 제한
+    lastMsg.content = sanitizeInput(lastMsg.content);
+
+    // 위험 콘텐츠 차단
+    if (containsBlockedContent(lastMsg.content)) {
+      return '힘든 일이 있으신가요? 😢 전문 상담이 필요하면 자살예방상담전화 1393으로 전화해 주세요. 도움받을 수 있어요 💙';
+    }
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = getApiKey();
+  } catch {
+    return 'AI 서비스 설정이 필요해요. 관리자에게 문의해 주세요 🔧';
+  }
+
   const contextMessage = buildContextPrompt(context);
 
   const controller = new AbortController();
@@ -97,7 +144,7 @@ export async function sendChatMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer YOUR_OPENAI_API_KEY`, // TODO: 환경변수로 교체
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
@@ -130,7 +177,14 @@ export async function sendChatMessage(
       return '미안해요, 답변을 못 받았어요. 다시 물어봐 주세요 🙏';
     }
 
-    return data.choices[0].message.content;
+    let reply: string = data.choices[0].message.content;
+
+    // 응답 필터링: 위험한 내용이 포함된 경우 차단
+    if (containsBlockedContent(reply)) {
+      return '안전한 이동에 집중할게요! 다른 질문이 있으면 말해주세요 😊';
+    }
+
+    return reply;
   } catch (error: unknown) {
     clearTimeout(timeoutId);
 
