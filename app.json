@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "saferoute-init",
-    "slug": "saferoute-init",
+    "name": "SafeRoute",
+    "slug": "saferoute",
     "version": "1.0.0",
+    "scheme": "saferoute",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +14,14 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.saferoute.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "길찾기 안내를 위해 위치 정보가 필요합니다.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "경로 이탈 감지를 위해 백그라운드 위치 접근이 필요합니다.",
+        "NSMicrophoneUsageDescription": "AI 음성 대화를 위해 마이크 접근이 필요합니다.",
+        "NSSpeechRecognitionUsageDescription": "음성 인식을 위해 권한이 필요합니다."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +29,37 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.saferoute.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECORD_AUDIO",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "경로 이탈 감지를 위해 백그라운드 위치 접근이 필요합니다.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#4A90D9"
+        }
+      ],
+      "expo-speech"
+    ]
   }
 }
